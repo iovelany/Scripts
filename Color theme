@@ -1,0 +1,110 @@
+local shared = odh_shared_plugins
+local section = shared.AddSection("COLOR CUSTOMIZER")
+
+local vibrantColors = {
+    Red = Color3.fromRGB(255,0,0),
+    Green = Color3.fromRGB(0,255,0),
+    Blue = Color3.fromRGB(0,0,255),
+    Yellow = Color3.fromRGB(255,255,0),
+    Magenta = Color3.fromRGB(255,0,255),
+    Cyan = Color3.fromRGB(0,255,255),
+    Orange = Color3.fromRGB(255,165,0),
+    Pink = Color3.fromRGB(255,105,180),
+    Lime = Color3.fromRGB(50,205,50),
+    Purple = Color3.fromRGB(128,0,128)
+}
+
+local primaryColor, secondaryColor
+local primaryTone, secondaryTone = 1,1
+local autoUpdate = false
+
+section:AddDropdown("Primary", {"Red","Green","Blue","Yellow","Magenta","Cyan","Orange","Pink","Lime","Purple"}, function(selected)
+    primaryColor = vibrantColors[selected]
+end)
+
+section:AddDropdown("Secondary", {"Red","Green","Blue","Yellow","Magenta","Cyan","Orange","Pink","Lime","Purple"}, function(selected)
+    secondaryColor = vibrantColors[selected]
+end)
+
+section:AddSlider("Primary Tone",0,150,100,function(value)
+    primaryTone = value/100
+end)
+
+section:AddSlider("Secondary Tone",0,150,100,function(value)
+    secondaryTone = value/100
+end)
+
+local function adjustTone(color,factor)
+    return Color3.new(
+        math.clamp(color.R*factor,0,1),
+        math.clamp(color.G*factor,0,1),
+        math.clamp(color.B*factor,0,1)
+    )
+end
+
+local function applyColors(gui)
+    local setHiddenProp = sethiddenproperty or set_hidden_property or set_hidden_prop
+    if not setHiddenProp then return end
+
+    for _,element in ipairs(gui:GetDescendants()) do
+        pcall(function()
+            if element:IsA("GuiObject") and not element:IsA("TextLabel") and not element:IsA("TextButton") and not element:IsA("TextBox") then
+                local colorA = adjustTone(primaryColor,primaryTone)
+                local colorB = adjustTone(secondaryColor,secondaryTone)
+                element.BackgroundColor3 = colorA
+                element.BorderColor3 = colorB
+                setHiddenProp(element,"BackgroundColor3",colorA)
+                setHiddenProp(element,"BorderColor3",colorB)
+            end
+            if element:IsA("UIGradient") then
+                local colorA = adjustTone(primaryColor,primaryTone)
+                local colorB = adjustTone(secondaryColor,secondaryTone)
+                element.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0,colorA),
+                    ColorSequenceKeypoint.new(1,colorB)
+                })
+            end
+        end)
+    end
+end
+
+section:AddToggle("Auto Apply Colors", function(state)
+    autoUpdate = state
+    if autoUpdate and primaryColor and secondaryColor then
+        local function updateContainer(container)
+            for _,gui in ipairs(container:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    applyColors(gui)
+                    gui.ChildAdded:Connect(function()
+                        applyColors(gui)
+                    end)
+                end
+            end
+            container.ChildAdded:Connect(function(child)
+                if child:IsA("ScreenGui") then
+                    applyColors(child)
+                    child.ChildAdded:Connect(function(c)
+                        applyColors(child)
+                    end)
+                end
+            end)
+        end
+
+        local funcs = {gethui,get_hui,getgui,get_gui}
+        for _,f in ipairs(funcs) do
+            if f then
+                pcall(function()
+                    local container = f()
+                    if container then updateContainer(container) end
+                end)
+            end
+        end
+
+        pcall(function()
+            local coreGui = game:GetService("CoreGui")
+            if coreGui then updateContainer(coreGui) end
+        end)
+    end
+end)
+
+shared.Notify("Credit: iovelany",2)
