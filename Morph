@@ -1,0 +1,170 @@
+local shared = odh_shared_plugins
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Seção no menu
+local morph_section = shared.AddSection("Morph Plugin")
+
+local morphTarget = ""
+
+
+morph_section:AddTextBox("Target Username", function(text)
+    morphTarget = text
+    shared.Notify("saved name: " .. text, 2)
+end)
+
+
+local function getChar()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function getHum()
+    local char = getChar()
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getHead(char)
+    return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+end
+
+local function IsR15()
+    local hum = getHum()
+    return hum and hum.RigType == Enum.HumanoidRigType.R15
+end
+
+local function IsR6()
+    local hum = getHum()
+    return hum and hum.RigType == Enum.HumanoidRigType.R6
+end
+
+local function Lower(str)
+    return string.lower(str)
+end
+
+
+local function addAccessory(char, assetId)
+    local a = game:GetObjects("rbxassetid://"..assetId)[1]
+    if not (a and a:IsA("Accessory")) then return end
+    for _,v in ipairs(a:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+            v.Massless = true
+        end
+    end
+    a.Parent = char
+    local handle = a:FindFirstChild("Handle")
+    if not handle then return end
+    local attachments = {}
+    for _, ch in ipairs(handle:GetChildren()) do
+        if ch:IsA("Attachment") then
+            table.insert(attachments, ch)
+        end
+    end
+    local welded = false
+    for _, ac in ipairs(attachments) do
+        local ra = char:FindFirstChild(ac.Name, true)
+        if ra and ra:IsA("Attachment") then
+            handle.CFrame = ra.WorldCFrame * ac.CFrame:Inverse()
+            local w = Instance.new("WeldConstraint")
+            w.Part0 = ra.Parent
+            w.Part1 = handle
+            w.Parent = handle
+            welded = true
+            break
+        end
+    end
+    if not welded then
+        local hd = getHead(char)
+        if hd then
+            handle.CFrame = hd.CFrame
+            local w = Instance.new("WeldConstraint")
+            w.Part0 = hd
+            w.Part1 = handle
+            w.Parent = handle
+        end
+    end
+end
+
+
+local function MorphToUser(username)
+    local uid
+    local success, id = pcall(Players.GetUserIdFromNameAsync, Players, username)
+    if success then uid = id else
+        shared.Notify("invalid user", 2)
+        return
+    end
+
+    local char = getChar()
+    for _, v in ipairs(char:GetChildren()) do
+        if v:IsA("Accessory") or v:IsA("CharacterMesh") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") then
+            v:Destroy()
+        end
+    end
+
+    local desc = Players:GetHumanoidDescriptionFromUserId(uid)
+    local appearance = Players:GetCharacterAppearanceAsync(uid)
+
+    
+    for _, info in ipairs(desc:GetAccessories(true)) do
+        addAccessory(char, info.AssetId)
+    end
+
+    
+    local hum = getHum()
+    if hum and hum:FindFirstChild("HumanoidDescription") then
+        local pd = hum.HumanoidDescription
+        pd.BodyTypeScale = desc.BodyTypeScale
+        pd.DepthScale = desc.DepthScale
+        pd.HeadScale = desc.HeadScale
+        pd.HeightScale = desc.HeightScale
+        pd.ProportionScale = desc.ProportionScale
+        pd.WidthScale = desc.WidthScale
+    end
+
+   
+    local bc = char:FindFirstChildOfClass("BodyColors")
+    if bc then
+        bc.HeadColor3 = desc.HeadColor
+        bc.LeftArmColor3 = desc.LeftArmColor
+        bc.LeftLegColor3 = desc.LeftLegColor
+        bc.RightArmColor3 = desc.RightArmColor
+        bc.RightLegColor3 = desc.RightLegColor
+        bc.TorsoColor3 = desc.TorsoColor
+    end
+
+    
+    local head = getHead(char)
+    if head then
+        for _, dec in ipairs(head:GetChildren()) do
+            if dec:IsA("Decal") then dec:Destroy() end
+        end
+    end
+
+    
+    for _, v in ipairs(appearance:GetDescendants()) do
+        if IsR6() and (v:IsA("CharacterMesh") or v:IsA("SpecialMesh")) then
+            v:Clone().Parent = char
+        elseif IsR15() and v:IsA("MeshPart") then
+            local tp = char:FindFirstChild(v.Name)
+            if tp then 
+                tp.MeshId = v.MeshId 
+                tp.TextureID = v.TextureID 
+            end
+        elseif v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") then
+            v:Clone().Parent = char
+        elseif v:IsA("Decal") and Lower(v.Name) == "face" then
+            v:Clone().Parent = head
+        end
+    end
+
+    shared.Notify("morph to : " .. username, 3)
+end
+
+-- Botão -> Executar morph
+morph_section:AddButton("Morph!", function()
+    if morphTarget == "" then
+        shared.Notify("enter a user", 2)
+    else
+        MorphToUser(morphTarget)
+    end
+end)
